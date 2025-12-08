@@ -7,7 +7,7 @@ const sections = [
   { id: "home", label: "Home" },
   { id: "about", label: "About" },
   { id: "dashboard", label: "Dashboard" },
-  { id: "visualizations", label: "Visualizations" },
+  { id: "contact", label: "Contact" },
 ];
 
 export default function Navbar() {

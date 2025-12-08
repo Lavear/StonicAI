@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Chart as ChartJS,
   LineElement,
@@ -24,15 +24,24 @@ ChartJS.register(
 
 const TABLE_ROWS = 10;   // show latest 10 rows in table
 const MAX_POINTS = 120;  // keep last 120 points for graphs
+const WINDOW_SIZE = 64;  // must match model config
+
+// 🔴 UPDATE THIS to your friend's FastAPI endpoint
+// Example: "http://10.51.223.100:8001/anomaly"
+const FASTAPI_URL = "http://192.168.1.103:8001/predict";
 
 export default function DashboardSection() {
   const [samples, setSamples] = useState([]);
   const [retryIndex, setRetryIndex] = useState(0);
   const [connected, setConnected] = useState(false);
 
+  // Sliding window buffer used for ML model input
+  const windowRef = useRef([]);          // array of [10-feature arrays]
+  const inferInProgressRef = useRef(false); // avoid spamming FastAPI
+
   useEffect(() => {
-    // Update this to your actual WS endpoint (IP + port)
-    const socket = new WebSocket("ws://10.51.223.246:8000");
+    // WebSocket to ESP32 (update IP/port as needed)
+    const socket = new WebSocket("ws://10.51.223.234:8000");
 
     socket.onopen = () => {
       console.log("WebSocket connected");
@@ -43,18 +52,13 @@ export default function DashboardSection() {
       try {
         const data = JSON.parse(event.data);
 
-        // We know ESP is sending:
-        // ts, microstrain, motion_mag, temp, hum, ax, ay, az, gx, gy, gz, damage
-        const isAnomaly =
-          data.anomaly === 1 ||
-          data.anomaly === true ||
-          data.damage === 1;
-
+        // 1) Build a "sample" object for UI
+        console.log("first")
         const sample = {
           id: `${Date.now()}-${Math.random()}`,
           microstrain: data.microstrain ?? data.strain ?? null,
           motionMag: data.motion_mag ?? data.motionMag ?? null,
-          temp: data.temp ?? data.temperature ?? null,
+          temp: data.temp ?? data.temperature ?? 30,
           humidity: data.hum ?? data.humidity ?? null,
           accX: data.ax ?? data.accel_x ?? null,
           accY: data.ay ?? data.accel_y ?? null,
@@ -62,14 +66,89 @@ export default function DashboardSection() {
           gyroX: data.gx ?? data.gyro_x ?? null,
           gyroY: data.gy ?? data.gyro_y ?? null,
           gyroZ: data.gz ?? data.gyro_z ?? null,
-          isAnomaly,
+          isAnomaly: false,      // will be updated after FastAPI response
+          anomalyScore: null,    // will be updated after FastAPI response
         };
-
+        console.log("second")
+        // 2) Update samples for table + graphs
         setSamples((prev) => {
           const next = [...prev, sample];
-          if (next.length > MAX_POINTS) next.shift(); // drop oldest
+          if (next.length > MAX_POINTS) next.shift();
           return next;
         });
+        console.log("third")
+        // 3) Update sliding window for ML (10 features)
+        const featureRow = [
+          sample.microstrain ?? 0,
+          sample.motionMag ?? 0,
+          sample.temp ?? 0,
+          sample.humidity ?? 0,
+          sample.accX ?? 0,
+          sample.accY ?? 0,
+          sample.accZ ?? 0,
+          sample.gyroX ?? 0,
+          sample.gyroY ?? 0,
+          sample.gyroZ ?? 0,
+        ];
+        console.log("fourth")
+        windowRef.current = [...windowRef.current, featureRow];
+        if (windowRef.current.length > WINDOW_SIZE) {
+          windowRef.current.shift();
+        }
+        console.log("fifth")
+        // 4) If we have a full window and no inference in progress, call FastAPI
+        if (
+          windowRef.current.length === WINDOW_SIZE &&
+          !inferInProgressRef.current
+        ) {
+          inferInProgressRef.current = true;
+          console.log("sixth")
+          (async () => {
+            try {
+              const res = await fetch(FASTAPI_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ readings: windowRef.current }),
+              });
+
+              if (!res.ok) {
+                console.error("FastAPI anomaly error:", res.status);
+                return;
+              }
+
+              const result = await res.json();
+
+              // Expecting: { anomaly_score: float, anomaly: 0/1 or true/false }
+              const score =
+                result.anomaly_score ??
+                result.score ??
+                result.mse ??
+                null;
+              const anomalyFlag =
+                result.anomaly === 1 ||
+                result.anomaly === true ||
+                result.isAnomaly === true;
+
+              // Update the latest sample with anomaly info
+              setSamples((prev) => {
+                if (!prev.length) return prev;
+                const updated = [...prev];
+                const lastIdx = updated.length - 1;
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  anomalyScore:
+                    typeof score === "number" ? score : score != null ? parseFloat(score) : null,
+                  isAnomaly: !!anomalyFlag,
+                };
+                return updated;
+              });
+            } catch (err) {
+              console.error("Error calling FastAPI anomaly endpoint:", err);
+            } finally {
+              inferInProgressRef.current = false;
+            }
+          })();
+        }
       } catch (err) {
         console.error("Invalid WebSocket data:", event.data, err);
       }
@@ -283,10 +362,10 @@ export default function DashboardSection() {
       >
         <div className="border-b border-slate-800 px-4 py-3 flex justify-between items-center">
           <div className="text-xs sm:text-sm uppercase tracking-wide text-slate-300">
-            Sensor Snapshot (Latest {TABLE_ROWS} Samples)
+            Sensor Snapshot
           </div>
           <div className="text-[10px] sm:text-xs text-slate-400">
-            Strain • Motion Mag • DHT (Temp &amp; Humidity) • Accelerometer (X,Y,Z) • Gyroscope (X,Y,Z)
+            Strain • Motion Mag • DHT (Temp &amp; Humidity) • Accelerometer (X,Y,Z) • Gyroscope (X,Y,Z) • Anomaly Score
           </div>
         </div>
 
@@ -344,7 +423,17 @@ export default function DashboardSection() {
                     <Td>{row.gyroY ?? "-"}</Td>
                     <Td>{row.gyroZ ?? "-"}</Td>
                     <Td>
-                      {row.isAnomaly ? (
+                      {typeof row.anomalyScore === "number" ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${
+                            row.isAnomaly
+                              ? "bg-red-500/20 text-red-300 border border-red-500/40"
+                              : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                          }`}
+                        >
+                          {row.anomalyScore.toFixed(5)}
+                        </span>
+                      ) : row.isAnomaly ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/40">
                           YES
                         </span>
@@ -378,12 +467,12 @@ export default function DashboardSection() {
 
       {/* Strain & Temperature */}
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
-        <ChartCard title="Strain vs Sample Index" subtitle="µε over recent window">
+        <ChartCard title="Strain vs Time" subtitle="µε over recent window">
           <Line data={strainData} options={commonOptions} />
         </ChartCard>
 
         <ChartCard
-          title="Temperature vs Sample Index"
+          title="Temperature vs Time"
           subtitle="°C profile of sensor node"
         >
           <Line data={tempData} options={commonOptions} />
@@ -392,36 +481,36 @@ export default function DashboardSection() {
 
       {/* Accelerometer X/Y/Z */}
       <h3 className="text-sm sm:text-base font-semibold text-slate-200 mb-3">
-        Accelerometer (X, Y, Z) vs Sample Index
+        Accelerometer (X, Y, Z) vs Time
       </h3>
       <div className="grid md:grid-cols-3 gap-6 mb-8">
-        <ChartCard title="Acc X vs Sample Index" subtitle="Linear acceleration - X">
+        <ChartCard title="Acc X vs Time" subtitle="Linear acceleration - X">
           <Line data={accXData} options={commonOptions} />
         </ChartCard>
 
-        <ChartCard title="Acc Y vs Sample Index" subtitle="Linear acceleration - Y">
+        <ChartCard title="Acc Y vs Time" subtitle="Linear acceleration - Y">
           <Line data={accYData} options={commonOptions} />
         </ChartCard>
 
-        <ChartCard title="Acc Z vs Sample Index" subtitle="Linear acceleration - Z">
+        <ChartCard title="Acc Z vs Time" subtitle="Linear acceleration - Z">
           <Line data={accZData} options={commonOptions} />
         </ChartCard>
       </div>
 
       {/* Gyroscope X/Y/Z */}
       <h3 className="text-sm sm:text-base font-semibold text-slate-200 mb-3">
-        Gyroscope (X, Y, Z) vs Sample Index
+        Gyroscope (X, Y, Z) vs Time
       </h3>
       <div className="grid md:grid-cols-3 gap-6 mb-8">
-        <ChartCard title="Gyro X vs Sample Index" subtitle="Angular rate - X">
+        <ChartCard title="Gyro X vs Time" subtitle="Angular rate - X">
           <Line data={gyroXData} options={commonOptions} />
         </ChartCard>
 
-        <ChartCard title="Gyro Y vs Sample Index" subtitle="Angular rate - Y">
+        <ChartCard title="Gyro Y vs Time" subtitle="Angular rate - Y">
           <Line data={gyroYData} options={commonOptions} />
         </ChartCard>
 
-        <ChartCard title="Gyro Z vs Sample Index" subtitle="Angular rate - Z">
+        <ChartCard title="Gyro Z vs Time" subtitle="Angular rate - Z">
           <Line data={gyroZData} options={commonOptions} />
         </ChartCard>
       </div>

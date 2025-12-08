@@ -3,7 +3,7 @@ import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import AboutSection from "@/components/AboutSection";
 import DashboardSection from "@/components/DashboardSection";
-import VisualizationsSection from "@/components/VisualizationsSection";
+import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
 
 export default function HomePage() {
@@ -20,8 +20,8 @@ export default function HomePage() {
       <section id="dashboard" className="pt-24">
         <DashboardSection />
       </section>
-      <section id="visualizations" className="pt-24 pb-24">
-        <VisualizationsSection />
+      <section id="contact" className="pt-24 pb-24">
+        <ContactSection />
       </section>
       <Footer />
     </main>

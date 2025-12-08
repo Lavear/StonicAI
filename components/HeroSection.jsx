@@ -32,9 +32,16 @@ export default function HeroSection() {
           >
             {/* Glowing circle behind model */}
             <div className="absolute w-[280px] h-[280px] sm:w-[360px] sm:h-[360px] rounded-full bg-gradient-to-tr from-cyan-500/20 via-emerald-500/10 to-fuchsia-500/20 blur-3xl" />
-            <div className="relative">
-              <StonicModel variant="intro" />
+            <div className="relative" id="1">
+              <div className="h-40 w-40 rounded-full border border-cyan-400 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(34,211,238,0.7)]">
+    <img 
+      src="/stonic.svg"   // <-- put your GIF path here
+      alt="heartbeat animation"
+      className="h-full w-full object-cover"
+    />
+  </div>
             </div>
+
             <motion.div
               initial={{ y: 18, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}

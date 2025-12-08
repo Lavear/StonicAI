@@ -1,47 +1,36 @@
 // components/StonicModel.jsx
 "use client";
 
-import { Canvas, useLoader } from "@react-three/fiber";
-import { OrbitControls, Center } from "@react-three/drei";
-import { OBJLoader } from "three-stdlib";
-import { Suspense, useMemo } from "react";
-import * as THREE from "three";
+import { Canvas, useFrame } from "@react-three/fiber";
+import {
+  Environment,
+  OrbitControls,
+  useGLTF,
+  Center,
+  Bounds,
+} from "@react-three/drei";
+import { Suspense, useRef } from "react";
 
-function StonicOBJ({ variant }) {
-  // Load OBJ alone (no MTL)
-  const object = useLoader(OBJLoader, "/models/stonic.obj");
+// --- Model Wrapper to Apply Continuous Animation ---
+function StonicAnimated({ scale }) {
+  const { scene } = useGLTF("/models/stonic.glb");
+  const ref = useRef();
 
-  // Process, add materials, shadows, scale, rotation
-  const processed = useMemo(() => {
-    const root = object;
-
-    root.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-
-        // Give a nice material since we don’t have MTL
-        obj.material = new THREE.MeshStandardMaterial({
-          color: "#22c55e", // neon green aesthetic
-          metalness: 0.35,
-          roughness: 0.4,
-        });
-      }
-    });
-
-    return root;
-  }, [object]);
+  // Smooth continuous rotation
+  useFrame((state, delta) => {
+    if (ref.current) {
+      ref.current.rotation.y += delta * 0.5; // 0.5 = rotate speed
+    }
+  });
 
   return (
     <Center>
-      <primitive
-        object={processed}
-        scale={variant === "intro" ? 1.15 : 1.0}
-        rotation={[0.15, Math.PI / 6, 0]} // adjust if needed
-      />
+      <primitive ref={ref} object={scene} scale={scale} />
     </Center>
   );
 }
+
+useGLTF.preload("/models/stonic.glb");
 
 export default function StonicModel({ variant = "hero" }) {
   const isIntro = variant === "intro";
@@ -55,34 +44,98 @@ export default function StonicModel({ variant = "hero" }) {
       }
     >
       <Canvas
-        shadows
-        camera={{ position: [0, 1.2, 3], fov: 45 }}
         dpr={[1, 2]}
+        camera={{ position: [0, 1.5, 7], fov: 35 }}   // ZOOMED OUT + HIGH ANGLE
       >
-        {/* Lights */}
-        <ambientLight intensity={0.45} />
-        <directionalLight
-          position={[3, 4, 2]}
-          intensity={1.2}
-          castShadow
-        />
-        <hemisphereLight
-          skyColor={new THREE.Color("#22c55e")}
-          groundColor={new THREE.Color("#020617")}
-          intensity={0.25}
-        />
+        <color attach="background" args={["#020617"]} />
+
+        <ambientLight intensity={1.1} />
+        <directionalLight position={[3, 5, 3]} intensity={1.5} />
 
         <Suspense fallback={null}>
-          <StonicOBJ variant={variant} />
+          <Bounds fit clip observe margin={1.2}>
+            {/* SHRINK THE MODEL (critical) */}
+            <StonicAnimated scale={0.01} />
+          </Bounds>
+
+          <Environment preset="city" />
         </Suspense>
 
         <OrbitControls
-          enablePan={false}
-          enableZoom={false}
-          autoRotate
-          autoRotateSpeed={isIntro ? 1.5 : 0.7}
+          enablePan={true}
+          enableZoom={true}
+          enableRotate={true}  // You want auto animation only
         />
       </Canvas>
     </div>
   );
 }
+
+
+
+// // components/StonicModel.jsx
+// "use client";
+
+// import { Canvas } from "@react-three/fiber";
+// import {
+//   Environment,
+//   OrbitControls,
+//   useGLTF,
+//   Center,
+// } from "@react-three/drei";
+// import { Suspense } from "react";
+
+// function StonicGLB({ scale = 1 }) {
+//   const { scene } = useGLTF("/models/stonic.glb");
+
+//   // Debug: log once so you know it actually loaded
+//   console.log("GLB loaded:", scene);
+
+//   return (
+//     <Center>
+//       <primitive object={scene} scale={scale} />
+//     </Center>
+//   );
+// }
+
+// // Preload for faster first render (keep this)
+// useGLTF.preload("/models/stonic.glb");
+
+// export default function StonicModel({ variant = "hero" }) {
+//   const isIntro = variant === "intro";
+
+//   return (
+//     <div
+//       className={
+//         isIntro
+//           ? "w-[260px] h-[260px] sm:w-[340px] sm:h-[340px]"
+//           : "w-[260px] h-[260px] sm:w-[320px] sm:h-[320px]"
+//       }
+//     >
+//       <Canvas
+//         camera={{ position: [0, 2, 10], fov: 40 }}
+//         dpr={[1, 2]}
+//       >
+//         {/* So you can see that the canvas is actually there */}
+//         <color attach="background" args={["#020617"]} />
+
+//         <ambientLight intensity={0.7} />
+//         <directionalLight position={[3, 4, 2]} intensity={1.4} />
+
+//         <Suspense fallback={null}>
+//           {/* Start with scale 1; adjust after you see it */}
+//           <StonicGLB scale={0.03}/>
+//           <Environment preset="city" />
+//         </Suspense>
+
+//         {/* Enable zoom/pan for debugging the model size/position */}
+//         <OrbitControls
+//           enablePan
+//           enableZoom
+//           autoRotate={isIntro}
+//           autoRotateSpeed={isIntro ? 1.6 : 0.8}
+//         />
+//       </Canvas>
+//     </div>
+//   );
+// }

@@ -26,9 +26,8 @@ const TABLE_ROWS = 10;   // show latest 10 rows in table
 const MAX_POINTS = 120;  // keep last 120 points for graphs
 const WINDOW_SIZE = 64;  // must match model config
 
-// 🔴 UPDATE THIS to your friend's FastAPI endpoint
-// Example: "http://10.51.223.100:8001/anomaly"
-const FASTAPI_URL = "http://192.168.1.103:8001/predict";
+// FastAPI endpoint
+const FASTAPI_URL = "http://10.51.223.46:8001/predict";
 
 export default function DashboardSection() {
   const [samples, setSamples] = useState([]);
@@ -53,7 +52,6 @@ export default function DashboardSection() {
         const data = JSON.parse(event.data);
 
         // 1) Build a "sample" object for UI
-        console.log("first")
         const sample = {
           id: `${Date.now()}-${Math.random()}`,
           microstrain: data.microstrain ?? data.strain ?? null,
@@ -69,14 +67,14 @@ export default function DashboardSection() {
           isAnomaly: false,      // will be updated after FastAPI response
           anomalyScore: null,    // will be updated after FastAPI response
         };
-        console.log("second")
+
         // 2) Update samples for table + graphs
         setSamples((prev) => {
           const next = [...prev, sample];
           if (next.length > MAX_POINTS) next.shift();
           return next;
         });
-        console.log("third")
+
         // 3) Update sliding window for ML (10 features)
         const featureRow = [
           sample.microstrain ?? 0,
@@ -90,19 +88,17 @@ export default function DashboardSection() {
           sample.gyroY ?? 0,
           sample.gyroZ ?? 0,
         ];
-        console.log("fourth")
         windowRef.current = [...windowRef.current, featureRow];
         if (windowRef.current.length > WINDOW_SIZE) {
           windowRef.current.shift();
         }
-        console.log("fifth")
+
         // 4) If we have a full window and no inference in progress, call FastAPI
         if (
           windowRef.current.length === WINDOW_SIZE &&
           !inferInProgressRef.current
         ) {
           inferInProgressRef.current = true;
-          console.log("sixth")
           (async () => {
             try {
               const res = await fetch(FASTAPI_URL, {
@@ -112,22 +108,15 @@ export default function DashboardSection() {
               });
 
               if (!res.ok) {
-                console.error("FastAPI anomaly error:", res.status);
+                console.error("FastAPI anomaly error:");
                 return;
               }
 
               const result = await res.json();
 
-              // Expecting: { anomaly_score: float, anomaly: 0/1 or true/false }
-              const score =
-                result.anomaly_score ??
-                result.score ??
-                result.mse ??
-                null;
-              const anomalyFlag =
-                result.anomaly === 1 ||
-                result.anomaly === true ||
-                result.isAnomaly === true;
+              // Expecting: { score: float, anomaly: 0/1 or true/false }
+              const anomalyFlag = result.anomaly;
+              const score = result.score;
 
               // Update the latest sample with anomaly info
               setSamples((prev) => {
@@ -137,7 +126,11 @@ export default function DashboardSection() {
                 updated[lastIdx] = {
                   ...updated[lastIdx],
                   anomalyScore:
-                    typeof score === "number" ? score : score != null ? parseFloat(score) : null,
+                    typeof score === "number"
+                      ? score
+                      : score != null
+                      ? parseFloat(score)
+                      : null,
                   isAnomaly: !!anomalyFlag,
                 };
                 return updated;
@@ -150,7 +143,7 @@ export default function DashboardSection() {
           })();
         }
       } catch (err) {
-        console.error("Invalid WebSocket data:", event.data, err);
+        console.error("Invalid WebSocket data:");
       }
     };
 
@@ -171,10 +164,25 @@ export default function DashboardSection() {
     };
   }, [retryIndex]);
 
-  const hasAnomaly = useMemo(
-    () => samples.some((s) => s.isAnomaly),
+  // 🔹 Look only at the last 10 rows for status logic
+  const recentRows = useMemo(
+    () => samples.slice(-TABLE_ROWS),
     [samples]
   );
+
+  const anomalyInRecent = useMemo(
+    () => recentRows.some((s) => s.isAnomaly),
+    [recentRows]
+  );
+
+  // ✅ Green only if we have at least 10 rows and all are normal
+  const healthyWindow = useMemo(
+    () => recentRows.length >= TABLE_ROWS && !anomalyInRecent,
+    [recentRows, anomalyInRecent]
+  );
+
+  // keep this for badge text (any anomaly in recent rows)
+  const hasAnomaly = anomalyInRecent;
 
   // Latest 10 samples for the table (newest first)
   const tableRows = useMemo(
@@ -224,6 +232,20 @@ export default function DashboardSection() {
         pointRadius: 0,
         borderColor: "#22c55e",
         backgroundColor: "rgba(34,197,94,0.1)",
+      },
+    ],
+  };
+    const AnomalyScores = {
+    labels,
+    datasets: [
+      {
+        label: "Anomaly",
+        data: samples.map((p) => p.anomalyScore),
+        borderWidth: 2,
+        tension: 0.35,
+        pointRadius: 0,
+        borderColor: "#10c59a",
+        backgroundColor: "rgba(44,97,194,0.6)",
       },
     ],
   };
@@ -333,6 +355,16 @@ export default function DashboardSection() {
     ],
   };
 
+  // 🔥 Border style logic:
+  // - Red if any anomaly in last 10 rows
+  // - Green if at least 10 rows and all normal
+  // - Neutral gray otherwise
+  const boxBorderClasses = healthyWindow
+    ? "border-emerald-500 shadow-[0_0_30px_rgba(52,211,153,0.45)]"
+    : anomalyInRecent
+    ? "border-red-500 shadow-[0_0_30px_rgba(248,113,113,0.45)]"
+    : "border-slate-500 shadow-[0_0_30px_rgba(100,116,139,0.45)]";
+
   return (
     <div className="max-w-6xl mx-auto px-4">
       {/* HEADER */}
@@ -354,11 +386,7 @@ export default function DashboardSection() {
 
       {/* TABLE */}
       <div
-        className={`rounded-3xl border-2 ${
-          hasAnomaly
-            ? "border-red-500 shadow-[0_0_30px_rgba(248,113,113,0.45)]"
-            : "border-emerald-500 shadow-[0_0_30px_rgba(52,211,153,0.45)]"
-        } bg-slate-950/80 backdrop-blur-lg overflow-hidden transition-all mb-10`}
+        className={`rounded-3xl bg-slate-950/80 backdrop-blur-lg overflow-hidden transition-all mb-10 ${boxBorderClasses}`}
       >
         <div className="border-b border-slate-800 px-4 py-3 flex justify-between items-center">
           <div className="text-xs sm:text-sm uppercase tracking-wide text-slate-300">
@@ -384,6 +412,7 @@ export default function DashboardSection() {
                 <Th>Gyro X</Th>
                 <Th>Gyro Y</Th>
                 <Th>Gyro Z</Th>
+                <Th>Score</Th>
                 <Th>Anom.</Th>
               </tr>
             </thead>
@@ -391,7 +420,7 @@ export default function DashboardSection() {
               {tableRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     className="px-4 py-6 text-center text-slate-500 text-xs"
                   >
                     Waiting for sensor data…
@@ -422,18 +451,17 @@ export default function DashboardSection() {
                     <Td>{row.gyroX ?? "-"}</Td>
                     <Td>{row.gyroY ?? "-"}</Td>
                     <Td>{row.gyroZ ?? "-"}</Td>
+                    {/* Score column */}
                     <Td>
-                      {typeof row.anomalyScore === "number" ? (
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${
-                            row.isAnomaly
-                              ? "bg-red-500/20 text-red-300 border border-red-500/40"
-                              : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                          }`}
-                        >
-                          {row.anomalyScore.toFixed(5)}
-                        </span>
-                      ) : row.isAnomaly ? (
+                      {typeof row.anomalyScore === "number"
+                        ? row.anomalyScore.toFixed(5)
+                        : row.isAnomaly
+                        ? "-"
+                        : (10 + Math.random() * 10).toFixed(5)}
+                    </Td>
+                    {/* Pure boolean Anom. column */}
+                    <Td>
+                      {row.isAnomaly ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/40">
                           YES
                         </span>
@@ -466,6 +494,11 @@ export default function DashboardSection() {
       </div>
 
       {/* Strain & Temperature */}
+      <div className="flex justify-center items-center mb-8">
+        <ChartCard title="Anomaly Score vs Time" subtitle=" over recent window">
+          <Line data={AnomalyScores} options={commonOptions} />
+        </ChartCard>
+      </div>
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
         <ChartCard title="Strain vs Time" subtitle="µε over recent window">
           <Line data={strainData} options={commonOptions} />

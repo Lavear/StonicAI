@@ -2,15 +2,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Router, { useRouter } from "next/navigation";
 
 const sections = [
   { id: "home", label: "Home" },
   { id: "about", label: "About" },
   { id: "dashboard", label: "Dashboard" },
-  { id: "contact", label: "Contact" },
+  { id: "simulation", label: "Simulation" },
 ];
 
 export default function Navbar() {
+  const router=useRouter();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -20,6 +22,9 @@ export default function Navbar() {
   }, []);
 
   const handleScroll = (id) => {
+    if(id==='simulation'){
+      router.push("/simulation")
+    }
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -56,7 +61,7 @@ export default function Navbar() {
             <button
               key={s.id}
               onClick={() => handleScroll(s.id)}
-              className="uppercase tracking-wide text-slate-300 hover:text-cyan-400 transition-colors"
+              className="cursor-pointer hover:underline uppercase tracking-wide text-slate-300 hover:text-cyan-400 transition-colors"
             >
               {s.label}
             </button>

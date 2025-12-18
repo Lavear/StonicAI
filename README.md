@@ -1,10 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+Stonic AI – Real-Time SHM Dashboard
 
-## Getting Started
+This repository contains the web dashboard for Stonic AI, an edge-deployed Structural Health Monitoring (SHM) system that performs real-time anomaly detection using time-series machine learning and streams results live via WebSockets.
 
-First, run the development server:
+The dashboard is built using Next.js and Tailwind CSS, and connects to an ESP32-based edge inference system to visualize continuous structural health metrics.
 
-```bash
+Project Overview
+
+Stonic AI is designed to detect early structural anomalies by analyzing multivariate time-series data using a CNN–LSTM autoencoder deployed at the edge.
+This repository focuses on the frontend and real-time communication layer, enabling:
+
+Live visualization of anomaly scores
+
+Continuous 24/7 monitoring
+
+Low-latency updates via WebSockets
+
+Scalable, modern web interface
+
+The system achieved 94% anomaly detection accuracy and enables over 90% cost reduction compared to traditional SHM systems.
+
+Tech Stack
+
+Framework: Next.js (App Router)
+
+Styling: Tailwind CSS
+
+Real-Time Communication: WebSockets
+
+Language: JavaScript
+
+Backend Integration: ESP32 edge device (WebSocket server)
+
+ML Backend: CNN–LSTM time-series autoencoder (TensorFlow)
+
+Getting Started
+
+First, install the dependencies:
+
+npm install
+# or
+yarn install
+# or
+pnpm install
+
+
+Then, run the development server:
+
 npm run dev
 # or
 yarn dev
@@ -12,25 +53,91 @@ yarn dev
 pnpm dev
 # or
 bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+Open the application in your browser:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+http://localhost:3000
 
-## Learn More
 
-To learn more about Next.js, take a look at the following resources:
+The page will automatically reload as you edit the source files.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Project Structure
+app/
+ ├── page.js            # Main dashboard UI
+ ├── layout.js          # Root layout
+ ├── components/        # Reusable UI components
+ ├── styles/            # Global styles
+public/
+ ├── assets/            # Images and static files
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+WebSocket Integration
 
-## Deploy on Vercel
+The dashboard establishes a persistent WebSocket connection with the ESP32 edge device.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Receives real-time anomaly scores and sensor data
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Updates the UI instantly without polling
+
+Supports continuous streaming for long-running monitoring sessions
+
+WebSockets are preferred over HTTP polling to ensure low latency and efficient real-time updates.
+
+Machine Learning Context (High Level)
+
+The edge device runs a CNN–LSTM autoencoder trained on time-series sensor data:
+
+CNN encoder extracts local temporal features
+
+LSTM decoder models structure-specific temporal behavior
+
+Anomalies are detected using reconstruction error
+
+This dashboard visualizes the output of the edge ML inference, not the raw training pipeline.
+
+Deployment
+
+The dashboard can be deployed using Vercel or any standard Node.js hosting platform.
+
+To deploy on Vercel:
+
+Push this repository to GitHub
+
+Import the project into Vercel
+
+Configure environment variables (if required)
+
+Deploy
+
+For more details, refer to the official documentation:
+https://nextjs.org/docs/app/building-your-application/deploying
+
+Learn More
+
+To learn more about the technologies used:
+
+Next.js Documentation: https://nextjs.org/docs
+
+WebSockets Guide: https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API
+
+Tailwind CSS: https://tailwindcss.com/docs
+
+Project Recognition
+
+This project secured 3rd Prize at Vision 2047, a national-level hackathon organized by FlairX Networks, Google Developer Groups RVCE, and RV College of Engineering.
+
+Team
+
+Raju Dhangar
+
+Ismail Warsi
+
+Harsh Dubey
+
+Om Patil
+
+Hamaas Shabir
+
+License
+
+This project is for academic and research purposes.
